@@ -30,6 +30,7 @@ private slots:
     void onRecordingStarted();
     void onRecordingStopped();
     void onPointRecorded(const MousePoint& point);
+    void onRecordingLimitReached();
 
     // Playback controls
     void onPlayButtonClicked();

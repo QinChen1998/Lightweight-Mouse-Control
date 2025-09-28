@@ -44,6 +44,11 @@ void SettingsDialog::setupUI()
     m_intervalSpinBox->setToolTip("Interval between recorded mouse positions\n1-9ms: Ultra-precise (may consume high CPU)\n10-49ms: High precision\n50-100ms: Balanced (recommended)\n100+ms: Low precision");
     recordingLayout->addRow("Recording Interval:", m_intervalSpinBox);
 
+    m_maxDurationLabel = new QLabel();
+    m_maxDurationLabel->setStyleSheet("color: #666666; font-style: italic;");
+    m_maxDurationLabel->setWordWrap(true);
+    recordingLayout->addRow("Max Recording Duration:", m_maxDurationLabel);
+
     // Playback settings group
     QGroupBox *playbackGroup = new QGroupBox("Playback Settings");
     QFormLayout *playbackLayout = new QFormLayout(playbackGroup);
@@ -103,6 +108,9 @@ void SettingsDialog::loadSettings()
     m_intervalSpinBox->setValue(interval);
     m_speedSpinBox->setValue(speed);
     m_minimizeCheckBox->setChecked(minimize);
+
+    // Update max duration display
+    updateMaxDurationDisplay();
 }
 
 // 保存设置：将UI控件的值保存到注册表
@@ -204,6 +212,9 @@ void SettingsDialog::onRestoreDefaultsClicked()
 
 void SettingsDialog::onIntervalValueChanged(int value)
 {
+    // Update duration display immediately
+    updateMaxDurationDisplay();
+
     // Restart the timer each time the value changes
     // This delays the validation until user stops changing the value
     m_validationTimer->stop();
@@ -214,6 +225,7 @@ void SettingsDialog::onIntervalValueChanged(int value)
 void SettingsDialog::onIntervalEditingFinished()
 {
     int value = m_intervalSpinBox->value();
+    updateMaxDurationDisplay();
     if (value <= 5) {
         showIntervalWarning(value);
     }
@@ -241,4 +253,37 @@ void SettingsDialog::showIntervalWarning(int interval)
     if (!message.isEmpty()) {
         QMessageBox::warning(this, "Recording Interval Warning", message);
     }
+}
+
+// 更新最大录制时长显示：根据当前间隔计算可录制时长
+void SettingsDialog::updateMaxDurationDisplay()
+{
+    if (!m_maxDurationLabel) return;
+
+    int intervalMs = m_intervalSpinBox->value();
+    const int MAX_POINTS = 300000; // Same as MouseRecorder::MAX_RECORDING_POINTS
+
+    // Calculate maximum recording duration
+    // Points per second = 1000 / intervalMs
+    // Max seconds = MAX_POINTS / (1000 / intervalMs) = MAX_POINTS * intervalMs / 1000
+    double maxSeconds = (double)MAX_POINTS * intervalMs / 1000.0;
+
+    QString durationText;
+    if (maxSeconds < 60) {
+        durationText = QString("%1 seconds").arg(QString::number(maxSeconds, 'f', 1));
+    } else if (maxSeconds < 3600) {
+        int minutes = (int)(maxSeconds / 60);
+        int seconds = (int)(maxSeconds) % 60;
+        durationText = QString("%1m %2s").arg(minutes).arg(seconds);
+    } else {
+        int hours = (int)(maxSeconds / 3600);
+        int minutes = (int)(maxSeconds / 60) % 60;
+        durationText = QString("%1h %2m").arg(hours).arg(minutes);
+    }
+
+    // Add memory usage info
+    double memoryMB = MAX_POINTS * 32.0 / (1024.0 * 1024.0); // 32 bytes per point
+    QString memoryText = QString::number(memoryMB, 'f', 1);
+
+    m_maxDurationLabel->setText(QString("≈ %1 (≈%2 MB memory)").arg(durationText).arg(memoryText));
 }

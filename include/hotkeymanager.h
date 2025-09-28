@@ -25,6 +25,8 @@ public:
     // Default hotkeys
     bool registerDefaultRecordingHotkey(); // Ctrl+B
     void unregisterDefaultRecordingHotkey();
+    bool registerStopPlaybackHotkey(); // ESC
+    void unregisterStopPlaybackHotkey();
 
     // Custom hotkey registration
     bool registerRecordingHotkey(const QString& keySequence);
@@ -35,6 +37,7 @@ public:
 
 signals:
     void recordingHotkeyPressed();
+    void stopPlaybackHotkeyPressed();
     void hotkeyPressed(int id);
 
 private:
@@ -46,6 +49,7 @@ private:
     HWND m_registrationHwnd; // Store the HWND used for registration
     QWidget* m_mainWindow; // Store the main window pointer
     static const int RECORDING_HOTKEY_ID = 1;
+    static const int STOP_PLAYBACK_HOTKEY_ID = 2;
 #endif
 };
 

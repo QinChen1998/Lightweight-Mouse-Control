@@ -115,4 +115,11 @@ void MouseRecorder::recordCurrentPosition()
     m_recordedPath.append(point);
 
     emit pointRecorded(point);
+
+    // Check if we've reached the maximum recording limit
+    if (m_recordedPath.size() >= MAX_RECORDING_POINTS) {
+        qWarning() << "Recording limit reached (" << MAX_RECORDING_POINTS << " points). Stopping recording.";
+        emit recordingLimitReached();
+        stopRecording();
+    }
 }

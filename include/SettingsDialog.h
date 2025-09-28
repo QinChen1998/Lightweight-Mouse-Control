@@ -50,12 +50,14 @@ private:
     void saveSettings();
     void restoreDefaults();
     void showIntervalWarning(int interval);
+    void updateMaxDurationDisplay();
 
     // UI components
     QKeySequenceEdit *m_hotkeyEdit;
     QSpinBox *m_intervalSpinBox;
     QDoubleSpinBox *m_speedSpinBox;
     QCheckBox *m_minimizeCheckBox;
+    QLabel *m_maxDurationLabel;
 
     QPushButton *m_okButton;
     QPushButton *m_cancelButton;

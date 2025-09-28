@@ -4,6 +4,7 @@
 #include <QInputDialog>
 #include <QShowEvent>
 #include <QThread>
+#include <QMessageBox>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -60,6 +61,7 @@ void MainWindow::connectSignals()
     connect(m_recorder, &MouseRecorder::recordingStarted, this, &MainWindow::onRecordingStarted);
     connect(m_recorder, &MouseRecorder::recordingStopped, this, &MainWindow::onRecordingStopped);
     connect(m_recorder, &MouseRecorder::pointRecorded, this, &MainWindow::onPointRecorded);
+    connect(m_recorder, &MouseRecorder::recordingLimitReached, this, &MainWindow::onRecordingLimitReached);
 
     // Playback signals
     connect(ui->playButton, &QPushButton::clicked, this, &MainWindow::onPlayButtonClicked);
@@ -92,6 +94,7 @@ void MainWindow::connectSignals()
 
     // Hotkey signals
     connect(m_hotkeyManager, &HotkeyManager::recordingHotkeyPressed, this, &MainWindow::onRecordingHotkeyPressed);
+    connect(m_hotkeyManager, &HotkeyManager::stopPlaybackHotkeyPressed, this, &MainWindow::onStopButtonClicked);
 
     // Settings signals
     connect(m_settingsDialog, &SettingsDialog::settingsChanged, this, &MainWindow::onSettingsChanged);
@@ -142,12 +145,47 @@ void MainWindow::onRecordingStopped()
     }
 }
 
-// 录制到新点事件处理：更新点数计数显示
+// 录制到新点事件处理：更新点数计数和剩余百分比显示
 void MainWindow::onPointRecorded(const MousePoint& point)
 {
     Q_UNUSED(point)
     m_recordedPointsCount++;
-    updateRecordingStatus(QString("Recording... (%1 points)").arg(m_recordedPointsCount));
+
+    // Calculate remaining percentage
+    const int MAX_POINTS = 300000; // Same as MouseRecorder::MAX_RECORDING_POINTS
+    double usedPercentage = (double)m_recordedPointsCount / MAX_POINTS * 100.0;
+    double remainingPercentage = 100.0 - usedPercentage;
+
+    // Format the status message
+    QString statusMsg;
+    if (remainingPercentage > 10.0) {
+        statusMsg = QString("Recording... (%1 points, %2% remaining)")
+                   .arg(m_recordedPointsCount)
+                   .arg(QString::number(remainingPercentage, 'f', 1));
+    } else if (remainingPercentage > 1.0) {
+        statusMsg = QString("Recording... (%1 points, %2% remaining)")
+                   .arg(m_recordedPointsCount)
+                   .arg(QString::number(remainingPercentage, 'f', 2));
+    } else {
+        statusMsg = QString("Recording... (%1 points, %2% remaining - Near limit!)")
+                   .arg(m_recordedPointsCount)
+                   .arg(QString::number(remainingPercentage, 'f', 3));
+    }
+
+    updateRecordingStatus(statusMsg);
+}
+
+// 录制达到限制处理：显示警告信息
+void MainWindow::onRecordingLimitReached()
+{
+    updateRecordingStatus("Recording stopped: Maximum points limit reached (300,000 points)");
+    statusBar()->showMessage("Recording automatically stopped due to memory limit", 5000);
+
+    // Show warning message box
+    QMessageBox::warning(this, "Recording Limit Reached",
+                        "Recording has been automatically stopped because it reached the maximum limit of 300,000 points.\n\n"
+                        "This limit prevents excessive memory usage during long recordings.\n"
+                        "The recorded path has been saved successfully.");
 }
 
 // 播放按钮点击处理：加载并播放选中的鼠标路径
@@ -178,31 +216,40 @@ void MainWindow::onStopButtonClicked()
     m_player->stopPlaying();
 }
 
-// 播放开始事件处理：禁用播放和录制按钮
+// 播放开始事件处理：禁用播放和录制按钮，注册ESC停止热键
 void MainWindow::onPlaybackStarted()
 {
     ui->playButton->setEnabled(false);
     ui->stopButton->setEnabled(true);
     ui->recordButton->setEnabled(false);
-    statusBar()->showMessage("Playing back mouse path...");
+    statusBar()->showMessage("Playing back mouse path... (Press ESC to stop)");
+
+    // Register ESC hotkey to stop playback
+    m_hotkeyManager->registerStopPlaybackHotkey();
 }
 
-// 播放完成事件处理：恢复按钮状态
+// 播放完成事件处理：恢复按钮状态，取消注册ESC热键
 void MainWindow::onPlaybackFinished()
 {
     ui->playButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
     ui->recordButton->setEnabled(true);
     statusBar()->showMessage("Playback completed", 3000);
+
+    // Unregister ESC hotkey
+    m_hotkeyManager->unregisterStopPlaybackHotkey();
 }
 
-// 播放停止事件处理：恢复按钮状态
+// 播放停止事件处理：恢复按钮状态，取消注册ESC热键
 void MainWindow::onPlaybackStopped()
 {
     ui->playButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
     ui->recordButton->setEnabled(true);
     statusBar()->showMessage("Playback stopped", 3000);
+
+    // Unregister ESC hotkey
+    m_hotkeyManager->unregisterStopPlaybackHotkey();
 }
 
 // 播放速度改变处理：更新播放器的速度设置

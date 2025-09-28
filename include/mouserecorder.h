@@ -28,6 +28,7 @@ signals:
     void recordingStarted();
     void recordingStopped();
     void pointRecorded(const MousePoint& point);
+    void recordingLimitReached();
 
 private slots:
     void recordCurrentPosition();
@@ -37,6 +38,9 @@ private:
     QList<MousePoint> m_recordedPath;
     bool m_isRecording;
     int m_recordingInterval;
+
+    // Maximum points limit (5 minutes at 1ms interval = 300,000 points)
+    static const int MAX_RECORDING_POINTS = 300000;
 };
 
 #endif // MOUSERECORDER_H

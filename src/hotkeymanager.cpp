@@ -161,6 +161,25 @@ void HotkeyManager::unregisterDefaultRecordingHotkey()
 #endif
 }
 
+// 注册停止播放热键（ESC）
+bool HotkeyManager::registerStopPlaybackHotkey()
+{
+#ifdef Q_OS_WIN
+    // Register ESC key (no modifiers + VK_ESCAPE)
+    return registerHotkey(STOP_PLAYBACK_HOTKEY_ID, 0, VK_ESCAPE);
+#else
+    return false;
+#endif
+}
+
+// 取消注册停止播放热键
+void HotkeyManager::unregisterStopPlaybackHotkey()
+{
+#ifdef Q_OS_WIN
+    unregisterHotkey(STOP_PLAYBACK_HOTKEY_ID);
+#endif
+}
+
 // 注册自定义录制热键：解析并注册用户指定的热键组合
 bool HotkeyManager::registerRecordingHotkey(const QString& keySequence)
 {
@@ -287,6 +306,8 @@ bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message
             // Emit the appropriate signal based on the hotkey ID
             if (hotkeyId == RECORDING_HOTKEY_ID) {
                 emit recordingHotkeyPressed();
+            } else if (hotkeyId == STOP_PLAYBACK_HOTKEY_ID) {
+                emit stopPlaybackHotkeyPressed();
             }
 
             emit hotkeyPressed(hotkeyId);
