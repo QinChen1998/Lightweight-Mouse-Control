@@ -1,6 +1,8 @@
 #include "mouserecorder.h"
 #include <QDateTime>
 #include <QDebug>
+#include <QThread>
+#include <QCoreApplication>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
@@ -12,7 +14,10 @@ MouseRecorder::MouseRecorder(QObject *parent)
     , m_isRecording(false)
     , m_recordingInterval(50) // 50ms间隔，保证平滑录制
 {
-    connect(m_recordingTimer, &QTimer::timeout, this, &MouseRecorder::recordCurrentPosition);
+    connect(m_recordingTimer, &QTimer::timeout, this, &MouseRecorder::recordCurrentPosition, Qt::DirectConnection);
+
+    // Set timer type before setting interval
+    m_recordingTimer->setTimerType(Qt::PreciseTimer);
     m_recordingTimer->setInterval(m_recordingInterval);
 }
 
@@ -20,16 +25,25 @@ MouseRecorder::MouseRecorder(QObject *parent)
 void MouseRecorder::startRecording()
 {
     if (m_isRecording) {
-        qDebug() << "Already recording, ignoring start request";
         return;
     }
 
-    qDebug() << "Starting mouse recording with interval:" << m_recordingInterval << "ms";
     m_recordedPath.clear();
     m_isRecording = true;
+
+    // Stop timer first to ensure clean state
+    m_recordingTimer->stop();
+
+    // Set timer properties
+    m_recordingTimer->setTimerType(Qt::PreciseTimer);
+    m_recordingTimer->setInterval(m_recordingInterval);
+
+    // Start the timer
     m_recordingTimer->start();
 
-    qDebug() << "Recording timer started, isActive:" << m_recordingTimer->isActive();
+    // Force event processing
+    QCoreApplication::processEvents();
+
     emit recordingStarted();
 }
 
@@ -37,11 +51,9 @@ void MouseRecorder::startRecording()
 void MouseRecorder::stopRecording()
 {
     if (!m_isRecording) {
-        qDebug() << "Not recording, ignoring stop request";
         return;
     }
 
-    qDebug() << "Stopping mouse recording. Recorded points:" << m_recordedPath.size();
     m_recordingTimer->stop();
     m_isRecording = false;
 
@@ -83,7 +95,6 @@ int MouseRecorder::recordingInterval() const
 void MouseRecorder::recordCurrentPosition()
 {
     if (!m_isRecording) {
-        qDebug() << "recordCurrentPosition called but not recording, ignoring";
         return;
     }
 
@@ -94,11 +105,9 @@ void MouseRecorder::recordCurrentPosition()
     POINT winPos;
     if (GetCursorPos(&winPos)) {
         currentPos = QPoint(winPos.x, winPos.y);
-        // qDebug() << "Recording Windows API position:" << currentPos;
     } else {
         // Fallback to Qt if Windows API fails
         currentPos = QCursor::pos();
-        qDebug() << "Fallback to Qt position:" << currentPos;
     }
 #else
     currentPos = QCursor::pos();

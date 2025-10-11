@@ -114,6 +114,7 @@ bool HotkeyManager::unregisterHotkey(int id)
     }
 
     bool success = UnregisterHotKey(hwnd, id);
+
     if (success) {
         m_registeredHotkeys.removeAll(id);
         if (m_registeredHotkeys.isEmpty()) {

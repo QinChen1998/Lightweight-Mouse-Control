@@ -13,15 +13,23 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_awesome(new fa::QtAwesome(this))      // 图标库
     , m_recorder(new MouseRecorder(this))     // 鼠标录制器
     , m_player(new MousePlayer(this))         // 鼠标播放器
     , m_pathManager(new PathManager(this))    // 路径文件管理器
     , m_hotkeyManager(new HotkeyManager(this)) // 全局热键管理器
     , m_settingsDialog(new SettingsDialog(this)) // 设置对话框
+    , m_compactWindow(nullptr)  // 紧凑窗口（延迟创建）
     , m_recordedPointsCount(0)
     , m_hotkeysRegistered(false)
+    , m_remainingRepeats(0)
+    , m_totalRepeats(1)
 {
     ui->setupUi(this);
+
+    // Initialize QtAwesome
+    m_awesome->initFontAwesome();
+
     setupUI();
     connectSignals();
     loadSettings();
@@ -47,10 +55,316 @@ void MainWindow::setupUI()
 {
     // Set initial UI state
     ui->recordButton->setCheckable(true);
-    ui->speedSpinBox->setValue(1.0);
+
+    // 创建自定义SpinBox组件
+    m_speedSpinBox = new CustomDoubleSpinBox(this);
+    m_speedSpinBox->setRange(0.1, 5.0);
+    m_speedSpinBox->setSingleStep(0.1);
+    m_speedSpinBox->setValue(1.0);
+    m_speedSpinBox->setSuffix("x");
+    m_speedSpinBox->setDecimals(1);
+
+    m_repeatSpinBox = new CustomSpinBox(this);
+    m_repeatSpinBox->setRange(1, 1000);
+    m_repeatSpinBox->setSingleStep(1);
+    m_repeatSpinBox->setValue(1);
+    m_repeatSpinBox->setSuffix(" times");
+
+    // 替换UI中的SpinBox
+    QLayout* playbackLayout = ui->playbackGroupBox->layout();
+    if (playbackLayout) {
+        // 找到原有的speedSpinBox和repeatSpinBox并替换
+        QLayoutItem* item;
+        for (int i = 0; i < playbackLayout->count(); ++i) {
+            item = playbackLayout->itemAt(i);
+            if (item && item->widget()) {
+                if (item->widget()->objectName() == "speedSpinBox") {
+                    QWidget* oldWidget = item->widget();
+                    playbackLayout->removeWidget(oldWidget);
+                    playbackLayout->addWidget(m_speedSpinBox);
+                    oldWidget->hide();
+                } else if (item->widget()->objectName() == "repeatSpinBox") {
+                    QWidget* oldWidget = item->widget();
+                    playbackLayout->removeWidget(oldWidget);
+                    playbackLayout->addWidget(m_repeatSpinBox);
+                    oldWidget->hide();
+                }
+            }
+        }
+    }
 
     // Set status bar message
     statusBar()->showMessage("Ready");
+
+    // Set button icons using QtAwesome
+    QVariantMap redOptions;
+    redOptions.insert("color", QColor(231, 76, 60));
+    redOptions.insert("color-active", QColor(231, 76, 60));
+    ui->recordButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_circle, redOptions));
+
+    QVariantMap blueOptions;
+    blueOptions.insert("color", QColor(52, 152, 219));
+    ui->playButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_play, blueOptions));
+
+    QVariantMap orangeOptions;
+    orangeOptions.insert("color", QColor(230, 126, 34));
+    ui->stopButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_stop, orangeOptions));
+
+    QVariantMap grayOptions;
+    grayOptions.insert("color", QColor(127, 140, 141));
+    ui->renamePathButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_pen_to_square, grayOptions));
+    ui->deletePathButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_trash, QVariantMap{{"color", QColor(231, 76, 60)}}));
+    ui->batchDeleteButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_trash_can, QVariantMap{{"color", QColor(231, 76, 60)}}));
+    ui->selectAllButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_check_double, grayOptions));
+    ui->refreshPathsButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_rotate_right, grayOptions));
+    ui->settingsButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_gear, grayOptions));
+    ui->compactModeButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_compress, grayOptions));
+
+    // Apply modern stylesheet
+    QString styleSheet = R"(
+        /* Main Window Background */
+        QMainWindow {
+            background-color: #F5F7FA;
+        }
+
+        /* Central Widget */
+        QWidget#centralwidget {
+            background-color: #F5F7FA;
+        }
+
+        /* Modern GroupBox - Card Style */
+        QGroupBox {
+            background-color: white;
+            border: none;
+            border-radius: 8px;
+            margin-top: 12px;
+            padding: 15px;
+            font-weight: bold;
+            color: #2C3E50;
+        }
+
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 5px 10px;
+            color: #2C3E50;
+            font-size: 14px;
+        }
+
+        /* Record Button - Red Theme */
+        QPushButton#recordButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #E74C3C, stop:1 #C0392B);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 12px;
+            font-weight: bold;
+            font-size: 12px;
+            min-height: 28px;
+        }
+
+        QPushButton#recordButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #EC7063, stop:1 #E74C3C);
+        }
+
+        QPushButton#recordButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #C0392B, stop:1 #A93226);
+        }
+
+        QPushButton#recordButton:checked {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #27AE60, stop:1 #229954);
+        }
+
+        QPushButton#recordButton:checked:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #2ECC71, stop:1 #27AE60);
+        }
+
+        /* Play Button - Blue Theme */
+        QPushButton#playButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #3498DB, stop:1 #2980B9);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 12px;
+            font-weight: bold;
+            font-size: 12px;
+            min-height: 28px;
+        }
+
+        QPushButton#playButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #5DADE2, stop:1 #3498DB);
+        }
+
+        QPushButton#playButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #2980B9, stop:1 #21618C);
+        }
+
+        QPushButton#playButton:disabled {
+            background: #BDC3C7;
+            color: #7F8C8D;
+        }
+
+        /* Stop Button - Gray Theme */
+        QPushButton#stopButton {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #95A5A6, stop:1 #7F8C8D);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 12px;
+            font-weight: bold;
+            font-size: 12px;
+            min-height: 28px;
+        }
+
+        QPushButton#stopButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #AAB7B8, stop:1 #95A5A6);
+        }
+
+        QPushButton#stopButton:pressed {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                       stop:0 #7F8C8D, stop:1 #5D6D7E);
+        }
+
+        QPushButton#stopButton:disabled {
+            background: #ECF0F1;
+            color: #BDC3C7;
+        }
+
+        /* Normal Buttons - White with Border */
+        QPushButton {
+            background-color: white;
+            color: #3498DB;
+            border: 2px solid #3498DB;
+            border-radius: 5px;
+            padding: 5px 12px;
+            font-weight: 500;
+            font-size: 11px;
+            min-height: 26px;
+        }
+
+        QPushButton:hover {
+            background-color: #EBF5FB;
+            border-color: #2980B9;
+        }
+
+        QPushButton:pressed {
+            background-color: #D6EAF8;
+        }
+
+        QPushButton:disabled {
+            background-color: #ECF0F1;
+            color: #BDC3C7;
+            border-color: #BDC3C7;
+        }
+
+        /* ListWidget - Modern Style */
+        QListWidget {
+            background-color: white;
+            border: 1px solid #E8E8E8;
+            border-radius: 6px;
+            padding: 5px;
+            outline: none;
+        }
+
+        QListWidget::item {
+            padding: 8px;
+            border-radius: 4px;
+            color: #2C3E50;
+        }
+
+        QListWidget::item:selected {
+            background-color: #3498DB;
+            color: white;
+        }
+
+        QListWidget::item:hover:!selected {
+            background-color: #EBF5FB;
+        }
+
+        /* TextEdit - Modern Style */
+        QTextEdit {
+            background-color: white;
+            border: 1px solid #E8E8E8;
+            border-radius: 6px;
+            padding: 8px;
+            color: #2C3E50;
+            selection-background-color: #3498DB;
+        }
+
+
+        /* Labels */
+        QLabel {
+            color: #2C3E50;
+            font-size: 12px;
+        }
+
+        /* Status Label */
+        QLabel#recordingStatusLabel {
+            color: #7F8C8D;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        QLabel#intervalLabel, QLabel#hotkeyLabel {
+            color: #7F8C8D;
+            font-size: 11px;
+            padding: 5px 10px;
+            background-color: white;
+            border-radius: 4px;
+        }
+
+        /* StatusBar */
+        QStatusBar {
+            background-color: white;
+            color: #7F8C8D;
+            border-top: 1px solid #E8E8E8;
+        }
+
+        /* MenuBar */
+        QMenuBar {
+            background-color: white;
+            color: #2C3E50;
+            border-bottom: 1px solid #E8E8E8;
+        }
+
+        QMenuBar::item {
+            padding: 5px 10px;
+            background-color: transparent;
+        }
+
+        QMenuBar::item:selected {
+            background-color: #EBF5FB;
+            color: #3498DB;
+        }
+
+        QMenu {
+            background-color: white;
+            border: 1px solid #E8E8E8;
+            border-radius: 4px;
+        }
+
+        QMenu::item {
+            padding: 8px 25px;
+            color: #2C3E50;
+        }
+
+        QMenu::item:selected {
+            background-color: #3498DB;
+            color: white;
+        }
+    )";
+
+    this->setStyleSheet(styleSheet);
 }
 
 // 连接所有信号和槽：建立组件间的通信机制
@@ -66,7 +380,7 @@ void MainWindow::connectSignals()
     // Playback signals
     connect(ui->playButton, &QPushButton::clicked, this, &MainWindow::onPlayButtonClicked);
     connect(ui->stopButton, &QPushButton::clicked, this, &MainWindow::onStopButtonClicked);
-    connect(ui->speedSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onSpeedChanged);
+    connect(m_speedSpinBox, &CustomDoubleSpinBox::valueChanged, this, &MainWindow::onSpeedChanged);
     connect(m_player, &MousePlayer::playbackStarted, this, &MainWindow::onPlaybackStarted);
     connect(m_player, &MousePlayer::playbackFinished, this, &MainWindow::onPlaybackFinished);
     connect(m_player, &MousePlayer::playbackStopped, this, &MainWindow::onPlaybackStopped);
@@ -88,9 +402,13 @@ void MainWindow::connectSignals()
     connect(ui->actionExit, &QAction::triggered, this, &MainWindow::onActionExit);
     connect(ui->actionAbout, &QAction::triggered, this, &MainWindow::onActionAbout);
     connect(ui->actionDiagnostics, &QAction::triggered, this, &MainWindow::onActionDiagnostics);
+    connect(ui->actionCompactMode, &QAction::triggered, this, &MainWindow::onActionCompactMode);
 
     // Settings
     connect(ui->settingsButton, &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
+
+    // Compact mode
+    connect(ui->compactModeButton, &QPushButton::clicked, this, &MainWindow::onActionCompactMode);
 
     // Hotkey signals
     connect(m_hotkeyManager, &HotkeyManager::recordingHotkeyPressed, this, &MainWindow::onRecordingHotkeyPressed);
@@ -206,7 +524,12 @@ void MainWindow::onPlayButtonClicked()
         return;
     }
 
-    m_player->setPlaybackSpeed(ui->speedSpinBox->value());
+    // 初始化重复播放状态
+    m_currentPlaybackPath = path;
+    m_totalRepeats = m_repeatSpinBox->value();
+    m_remainingRepeats = m_totalRepeats - 1;  // 减去即将播放的第一次
+
+    m_player->setPlaybackSpeed(m_speedSpinBox->value());
     m_player->playPath(path);
 }
 
@@ -228,16 +551,38 @@ void MainWindow::onPlaybackStarted()
     m_hotkeyManager->registerStopPlaybackHotkey();
 }
 
-// 播放完成事件处理：恢复按钮状态，取消注册ESC热键
+// 播放完成事件处理：检查是否需要重复播放，或恢复按钮状态
 void MainWindow::onPlaybackFinished()
 {
-    ui->playButton->setEnabled(true);
-    ui->stopButton->setEnabled(false);
-    ui->recordButton->setEnabled(true);
-    statusBar()->showMessage("Playback completed", 3000);
+    // 检查是否还需要重复播放
+    if (m_remainingRepeats > 0) {
+        m_remainingRepeats--;
 
-    // Unregister ESC hotkey
-    m_hotkeyManager->unregisterStopPlaybackHotkey();
+        // 更新状态栏显示当前进度
+        int currentRepeat = m_totalRepeats - m_remainingRepeats;
+        statusBar()->showMessage(QString("Playing %1/%2...").arg(currentRepeat).arg(m_totalRepeats));
+
+        // 继续播放
+        m_player->setPlaybackSpeed(m_speedSpinBox->value());
+        m_player->playPath(m_currentPlaybackPath);
+    } else {
+        // 所有重复播放完成，恢复UI状态
+        ui->playButton->setEnabled(true);
+        ui->stopButton->setEnabled(false);
+        ui->recordButton->setEnabled(true);
+
+        if (m_totalRepeats > 1) {
+            statusBar()->showMessage(QString("Playback completed (%1 times)").arg(m_totalRepeats), 3000);
+        } else {
+            statusBar()->showMessage("Playback completed", 3000);
+        }
+
+        // Unregister ESC hotkey
+        m_hotkeyManager->unregisterStopPlaybackHotkey();
+
+        // 清空播放路径
+        m_currentPlaybackPath.clear();
+    }
 }
 
 // 播放停止事件处理：恢复按钮状态，取消注册ESC热键
@@ -246,10 +591,20 @@ void MainWindow::onPlaybackStopped()
     ui->playButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
     ui->recordButton->setEnabled(true);
-    statusBar()->showMessage("Playback stopped", 3000);
+
+    if (m_totalRepeats > 1) {
+        int completedRepeats = m_totalRepeats - m_remainingRepeats;
+        statusBar()->showMessage(QString("Playback stopped (%1/%2 completed)").arg(completedRepeats).arg(m_totalRepeats), 3000);
+    } else {
+        statusBar()->showMessage("Playback stopped", 3000);
+    }
 
     // Unregister ESC hotkey
     m_hotkeyManager->unregisterStopPlaybackHotkey();
+
+    // 清空播放路径和重置重复次数
+    m_currentPlaybackPath.clear();
+    m_remainingRepeats = 0;
 }
 
 // 播放速度改变处理：更新播放器的速度设置
@@ -539,6 +894,30 @@ void MainWindow::onActionDiagnostics()
     QMessageBox::information(this, "Mouse Control Diagnostics", diagnostics);
 }
 
+// 紧凑模式菜单动作处理：打开小窗口并隐藏主窗口
+void MainWindow::onActionCompactMode()
+{
+    // Create compact window if it doesn't exist
+    if (!m_compactWindow) {
+        m_compactWindow = new CompactWindow(this);
+        m_compactWindow->setComponents(m_recorder, m_player, m_pathManager, m_hotkeyManager);
+    }
+
+    // Update compact window with current settings
+    m_compactWindow->setPlaybackSpeed(m_speedSpinBox->value());
+    m_compactWindow->setRepeatCount(m_repeatSpinBox->value());
+    m_compactWindow->setRecordingHotkey(m_settingsDialog->getRecordingHotkey());
+
+    // Disconnect main window's hotkey signals to avoid duplicate handling
+    disconnect(m_hotkeyManager, &HotkeyManager::recordingHotkeyPressed, this, &MainWindow::onRecordingHotkeyPressed);
+    disconnect(m_hotkeyManager, &HotkeyManager::stopPlaybackHotkeyPressed, this, &MainWindow::onStopButtonClicked);
+
+    // Hide main window and show compact window
+    hide();
+    m_compactWindow->show();
+    m_compactWindow->activateWindow();
+}
+
 // 设置按钮点击处理：打开设置对话框
 void MainWindow::onSettingsClicked()
 {
@@ -600,14 +979,22 @@ void MainWindow::updateRecordingStatus(const QString& status)
     ui->recordingStatusLabel->setText(status);
 }
 
-// 更新录制按钮文本：根据当前状态和热键设置
+// 更新录制按钮文本和图标：根据当前状态和热键设置
 void MainWindow::updateRecordButtonText()
 {
     QString hotkey = m_settingsDialog->getRecordingHotkey();
+    QVariantMap options;
+
     if (m_recorder->isRecording()) {
         ui->recordButton->setText(QString("Stop Recording (%1)").arg(hotkey));
+        // Orange/Yellow when recording
+        options.insert("color", QColor(230, 126, 34));
+        ui->recordButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_stop, options));
     } else {
         ui->recordButton->setText(QString("Start Recording (%1)").arg(hotkey));
+        // Red when ready to record
+        options.insert("color", QColor(231, 76, 60));
+        ui->recordButton->setIcon(m_awesome->icon(fa::fa_solid, fa::fa_circle, options));
     }
 }
 
@@ -636,7 +1023,7 @@ void MainWindow::loadSettings()
 
     // Apply default playback speed
     double speed = m_settingsDialog->getDefaultPlaybackSpeed();
-    ui->speedSpinBox->setValue(speed);
+    m_speedSpinBox->setValue(speed);
     m_player->setPlaybackSpeed(speed);
 
     // Update interval display
@@ -706,6 +1093,15 @@ void MainWindow::showEvent(QShowEvent *event)
     // Register hotkeys when the window is fully shown
     if (!m_hotkeysRegistered) {
         registerHotkeysWhenReady();
+    } else {
+        // Re-connect hotkey signals when returning from compact mode
+        connect(m_hotkeyManager, &HotkeyManager::recordingHotkeyPressed, this, &MainWindow::onRecordingHotkeyPressed, Qt::UniqueConnection);
+        connect(m_hotkeyManager, &HotkeyManager::stopPlaybackHotkeyPressed, this, &MainWindow::onStopButtonClicked, Qt::UniqueConnection);
+
+        // Re-register hotkeys when returning from compact mode
+        m_hotkeyManager->setMainWindow(this);
+        QString hotkey = m_settingsDialog->getRecordingHotkey();
+        m_hotkeyManager->registerRecordingHotkey(hotkey);
     }
 }
 

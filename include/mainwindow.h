@@ -9,6 +9,9 @@
 #include "pathmanager.h"
 #include "hotkeymanager.h"
 #include "settingsdialog.h"
+#include "compactwindow.h"
+#include "customspinbox.h"
+#include "QtAwesome.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -56,6 +59,7 @@ private slots:
     void onActionExit();
     void onActionAbout();
     void onActionDiagnostics();
+    void onActionCompactMode();
 
     // Settings
     void onSettingsClicked();
@@ -83,15 +87,29 @@ protected:
     void showEvent(QShowEvent *event) override;
 
     Ui::MainWindow *ui;
+
+    // Icon library
+    fa::QtAwesome *m_awesome;
+
     MouseRecorder *m_recorder;
     MousePlayer *m_player;
     PathManager *m_pathManager;
     HotkeyManager *m_hotkeyManager;
     SettingsDialog *m_settingsDialog;
+    CompactWindow *m_compactWindow;
+
+    // Custom SpinBox components
+    CustomDoubleSpinBox *m_speedSpinBox;
+    CustomSpinBox *m_repeatSpinBox;
 
     // UI state
     int m_recordedPointsCount;
     QString m_currentSelectedPath;
     bool m_hotkeysRegistered;
+
+    // Repeat playback state
+    QList<MousePoint> m_currentPlaybackPath;
+    int m_remainingRepeats;
+    int m_totalRepeats;
 };
 #endif // MAINWINDOW_H

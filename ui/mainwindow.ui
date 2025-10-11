@@ -21,12 +21,30 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="spacing">
+     <number>15</number>
+    </property>
+    <property name="leftMargin">
+     <number>15</number>
+    </property>
+    <property name="topMargin">
+     <number>15</number>
+    </property>
+    <property name="rightMargin">
+     <number>15</number>
+    </property>
+    <property name="bottomMargin">
+     <number>15</number>
+    </property>
     <item>
      <widget class="QGroupBox" name="recordingGroupBox">
       <property name="title">
        <string>Recording Controls</string>
       </property>
       <layout class="QHBoxLayout" name="recordingLayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
        <item>
         <widget class="QPushButton" name="recordButton">
          <property name="text">
@@ -56,6 +74,9 @@
        <string>Playback Controls</string>
       </property>
       <layout class="QHBoxLayout" name="playbackLayout">
+       <property name="spacing">
+        <number>10</number>
+       </property>
        <item>
         <widget class="QPushButton" name="playButton">
          <property name="enabled">
@@ -102,6 +123,29 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QLabel" name="repeatLabel">
+         <property name="text">
+          <string>Repeat:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QSpinBox" name="repeatSpinBox">
+         <property name="suffix">
+          <string> times</string>
+         </property>
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>1000</number>
+         </property>
+         <property name="value">
+          <number>1</number>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -124,6 +168,9 @@
         </item>
         <item>
          <layout class="QHBoxLayout" name="pathButtonsLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
           <item>
            <widget class="QPushButton" name="renamePathButton">
             <property name="enabled">
@@ -193,10 +240,20 @@
     </item>
     <item>
      <layout class="QHBoxLayout" name="bottomButtonsLayout">
+      <property name="spacing">
+       <number>10</number>
+      </property>
       <item>
        <widget class="QPushButton" name="settingsButton">
         <property name="text">
          <string>Settings</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="compactModeButton">
+        <property name="text">
+         <string>Compact Mode</string>
         </property>
        </widget>
       </item>
@@ -244,6 +301,8 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionCompactMode"/>
+    <addaction name="separator"/>
     <addaction name="actionExit"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
@@ -270,6 +329,11 @@
   <action name="actionAbout">
    <property name="text">
     <string>About</string>
+   </property>
+  </action>
+  <action name="actionCompactMode">
+   <property name="text">
+    <string>Compact Mode</string>
    </property>
   </action>
  </widget>
